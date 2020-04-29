@@ -1,0 +1,352 @@
+---
+title: "IDDAP"
+author: "Infectious Diseases Data Analysis Program"
+output: 
+  flexdashboard::flex_dashboard:
+    source: embed
+    orientation: rows
+    vertical_layout: fill
+    theme: cerulean
+runtime: shiny
+
+---
+
+```{r}
+library(flexdashboard) 
+library(ggplot2)
+library(mgcv)
+library(shiny)
+library(dplyr)
+library(readr)  
+library(RColorBrewer)
+library(DT)
+newdata=read.csv("https://raw.githubusercontent.com/jessmahoney12/dataforIDDAP/master/PatientData.csv",stringsAsFactors=FALSE, check.names = FALSE)
+
+plotdata=read.csv("https://raw.githubusercontent.com/jessmahoney12/dataforIDDAP/master/PatientData.csv",stringsAsFactors= FALSE, check.names = TRUE)
+
+```
+
+Sidebar {.sidebar data-width=250} 
+===================================== 
+```{r}
+fileInput('file1', h5("Please Select a file to Upload"),accept=c('text/csv','text/comma-separated-values','text/tab-separated-values','text/plain','.csv','.tsv'))
+h2("Filters:")
+sliderInput('age', "Age Range", min = 20, max = 100, value=c(20, 100) )
+sliderInput('weight', "Weight Range (kgs) ", min = 30, max = 100, value=c(30, 100))
+sliderInput('height', "Height Range (m) ", min = 1.25, max = 2, value=c(1.25, 2))
+dateRangeInput('OPATad', "Admittance to the OPAT Program", start= "2005-01-01",end= "2020-01-01", min = "2005-01-01", max ="2020-01-01", separator = " - ", format = "yyyy/mm/dd", startview="year")
+checkboxGroupInput("resis", "Resistant Infection? (deselection will filter out the option)", choices= c("Yes"=1, "No"=2), selected = c(1,2))
+checkboxGroupInput("riskofre", "High Risk of Readmission? (deselection will filter out the option)", choices= c("Yes"=1, "No"=2), selected = c(1,2))
+checkboxGroupInput("MF", "Gender: (deselection will filter out the option)", choices= c("Male", "Female"), selected = c("Male", "Female"))
+checkboxGroupInput("AB", "Antibiotic Type: (deselection will filter out the option)", choices= c("Erythromycin"=1, "Lymecycline"=2, "Norfloxacin"=3, "Ciprofloxacin"=4, "Amoxicillin"=5, 	"Gentamicin"=6,"Phenoxymethylpenicillin"=7, "Other"=8), selected = c(1, 2, 3, 4, 5, 6, 7, 8))
+```
+
+File Manipulation
+===================================== 
+
+Output Column {.tabset .tabset-fade}
+-------------------------------------
+### Patient Data Results
+```{r}
+renderDataTable({
+    assign('inputfile',newdata)
+  # Age input conditionals
+  inputfile<- filter(inputfile,`Age`>=as.numeric(input$age[1]))
+  inputfile<- filter(inputfile,`Age`<=as.numeric(input$age[2]))
+  # Weight input conditionals
+  inputfile<- filter(inputfile,`Weight (kgs)`>=as.numeric(input$weight[1]))
+  inputfile<- filter(inputfile,`Weight (kgs)`<=as.numeric(input$weight[2]))
+  # Height input conditionals
+  inputfile<- filter(inputfile,`Height (m)`>=as.numeric(input$height[1]))
+  inputfile<- filter(inputfile,`Height (m)`<=as.numeric(input$height[2]))
+
+  # Date input conditionals
+inputfile<- filter(inputfile, (as.integer(input$OPATad[1]-as.Date.character(`OPAT Start Date`,"%m/%d/%Y"))) < 0)
+inputfile<- filter(inputfile, (as.integer(input$OPATad[2]-as.Date.character(`OPAT Start Date`,"%m/%d/%Y"))) > 0)
+
+  # Risk of readmission checkbox group
+  if("1" %in% input$riskofre==FALSE )
+    inputfile<- filter(inputfile,`High Risk of Readmission`=='Y')
+  if("2" %in% input$riskofre==FALSE)
+    inputfile<- filter(inputfile,`High Risk of Readmission`=='N')
+  if(is.null(input$riskofre))
+    inputfile <- "please mark whether the patient is at risk for readmission"
+
+  # Resistant Checkbox Group conditionals
+  if("1" %in% input$resis==FALSE )
+    inputfile<- filter(inputfile,`Resistant Organism Y/N`=='Y')
+  if("2" %in% input$resis==FALSE )
+    inputfile<- filter(inputfile,`Resistant Organism Y/N`=='N')
+  if(is.null(input$resis))
+    inputfile <- "please select a resistance"
+
+  # Gender Checkbox Group conditionals
+  if("Male" %in% input$MF==FALSE )
+    inputfile<- filter(inputfile,`Gender (M/F)`=='F')
+  if("Female" %in% input$MF==FALSE )
+    inputfile<- filter(inputfile,`Gender (M/F)`=='M')
+  if(is.null(input$resis))
+    inputfile <- "please select a gender"
+
+  # Antibiotic Type Checkbox Group conditionals
+  if("1" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='erythromycin')
+  if("2" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='lymecycline')
+  if("3" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='norfloxacin')
+  if("4" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='ciprofloxacin')
+  if("5" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='amoxicillin')
+  if("6" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='gentamicin')
+  if("7" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='phenoxymethylpenicillin')
+  if(is.null(input$AB))
+    inputfile <- "please select an antibiotic type"
+
+  inputfile <- datatable(inputfile, extensions= c("Scroller", "FixedColumns", "Buttons", 'ColReorder'),options = list(scrollY=375, scrollX=600, scroller=TRUE, fixedColumns = list(leftColumns = 1), dom = 'Bfrtip', buttons = c('colvis', 'csv', 'excel'), colReorder = TRUE)) %>% formatStyle(names(inputfile), fontSize='12px')
+  inputfile
+})
+ 
+```
+
+### Original File
+```{r}
+renderDataTable({
+  newdata <- datatable(newdata, extensions= c("Scroller", "FixedColumns", "Buttons", 'ColReorder'),options = list(scrollY=375, scrollX=600, scroller=TRUE, fixedColumns=list(leftColumns = 1), dom = 'Bfrtip', buttons = c('colvis', 'csv', 'excel'), colReorder = TRUE) ) %>% formatStyle(names(newdata), fontSize='12px')
+  newdata
+})
+```
+
+Data Analytics
+===================================== 
+
+Row1 { data-height=50}
+-----------------------------------------------------------------------
+```{r}
+h4("Select Graphical Output:")
+```
+
+Row 2 {.tabset .tabset-fade}
+-------------------------------------
+
+### Bar Graph 
+```{r}
+renderPlot({
+ 
+  assign('inputfile',newdata)
+  # Age input conditionals
+  inputfile<- filter(inputfile,`Age`>=as.numeric(input$age[1]))
+  inputfile<- filter(inputfile,`Age`<=as.numeric(input$age[2]))
+  # Weight input conditionals
+  inputfile<- filter(inputfile,`Weight (kgs)`>=as.numeric(input$weight[1]))
+  inputfile<- filter(inputfile,`Weight (kgs)`<=as.numeric(input$weight[2]))  
+  # Height input conditionals
+  inputfile<- filter(inputfile,`Height (m)`>=as.numeric(input$height[1]))
+  inputfile<- filter(inputfile,`Height (m)`<=as.numeric(input$height[2]))
+  
+  # Date input conditionals
+inputfile<- filter(inputfile, (as.integer(input$OPATad[1]-as.Date.character(`OPAT Start Date`,"%m/%d/%Y"))) < 0)
+inputfile<- filter(inputfile, (as.integer(input$OPATad[2]-as.Date.character(`OPAT Start Date`,"%m/%d/%Y"))) > 0) 
+  
+  # Risk of readmission checkbox group
+  if("1" %in% input$riskofre==FALSE )
+    inputfile<- filter(inputfile,`High Risk of Readmission`=="Y")
+  if("2" %in% input$riskofre==FALSE)
+    inputfile<- filter(inputfile,`High Risk of Readmission`=="N")
+  if(is.null(input$riskofre))
+    inputfile <- "please mark whether the patient is at risk for readmission"
+
+  # Resistant Checkbox Group conditionals
+  if("1" %in% input$resis==FALSE )
+    inputfile<- filter(inputfile,`Resistant Organism Y/N`=="Y")
+  if("2" %in% input$resis==FALSE )
+    inputfile<- filter(inputfile,`Resistant Organism Y/N`=="N")
+  if(is.null(input$resis))
+    inputfile <- "please select a resistance"
+
+
+  # Gender Checkbox Group conditionals
+  if("Male" %in% input$MF==FALSE )
+    inputfile<- filter(inputfile,`Gender (M/F)`=="F")
+  if("Female" %in% input$MF==FALSE )
+    inputfile<- filter(inputfile,`Gender (M/F)`=="M")
+  if(is.null(input$resis))
+    inputfile <- "please select a gender"
+  
+  # Antibiotic Type Checkbox Group conditionals
+  if("1" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='erythromycin')
+  if("2" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='lymecycline')
+  if("3" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='norfloxacin')
+  if("4" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='ciprofloxacin')
+  if("5" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='amoxicillin')
+  if("6" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='gentamicin')
+  if("7" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='phenoxymethylpenicillin')
+  if(is.null(input$AB))
+    inputfile <- "please select an antibiotic type"
+
+ggplot(inputfile,aes(x=Antibiotic))+geom_bar(fill=brewer.pal(7,"Set3"))+ylab("Number of Patients Taking Antibiotic")
+})
+```
+
+### Antibiotic Resistance 
+```{r}
+
+renderPlot({
+  assign('inputfile',plotdata)
+  # Age input conditionals
+  inputfile<- filter(inputfile,`Age`>=as.numeric(input$age[1]))
+  inputfile<- filter(inputfile,`Age`<=as.numeric(input$age[2]))
+  # Weight input conditionals
+  inputfile<- filter(inputfile,`Weight..kgs.`>=as.numeric(input$weight[1]))
+  inputfile<- filter(inputfile,`Weight..kgs.`<=as.numeric(input$weight[2]))  
+  # Height input conditionals
+  inputfile<- filter(inputfile,`Height..m.`>=as.numeric(input$height[1]))
+  inputfile<- filter(inputfile,`Height..m.`<=as.numeric(input$height[2]))
+  
+  # Date input conditionals
+inputfile<- filter(inputfile, (as.integer(input$OPATad[1]-as.Date.character(`OPAT.Start.Date`,"%m/%d/%Y"))) < 0)
+inputfile<- filter(inputfile, (as.integer(input$OPATad[2]-as.Date.character(`OPAT.Start.Date`,"%m/%d/%Y"))) > 0)
+  
+  # Risk of readmission checkbox group
+  if("1" %in% input$riskofre==FALSE )
+    inputfile<- filter(inputfile,`High.Risk.of.Readmission`=="Y")
+  if("2" %in% input$riskofre==FALSE)
+    inputfile<- filter(inputfile,`High.Risk.of.Readmission`=="N")
+  if(is.null(input$riskofre))
+    inputfile <- "please mark whether the patient is at risk for readmission"
+  
+  # Resistant Checkbox Group conditionals
+  if("1" %in% input$resis==FALSE )
+    inputfile<- filter(inputfile,`Resistant.Organism.Y.N`=="Y")
+  if("2" %in% input$resis==FALSE )
+    inputfile<- filter(inputfile,`Resistant.Organism.Y.N`=="N")
+  if(is.null(input$resis))
+    inputfile <- "please select a resistance"
+
+   
+ # Gender Checkbox Group conditionals
+  if("Male" %in% input$MF==FALSE )
+    inputfile<- filter(inputfile,`Gender..M.F.`=="F")
+  if("Female" %in% input$MF==FALSE )
+    inputfile<- filter(inputfile,`Gender..M.F.`=="M")
+  if(is.null(input$resis))
+    inputfile <- "please select a gender"
+
+  # Antibiotic Type Checkbox Group conditionals
+  if("1" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='erythromycin')
+  if("2" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='lymecycline')
+  if("3" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='norfloxacin')
+  if("4" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='ciprofloxacin')
+  if("5" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='amoxicillin')
+  if("6" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='gentamicin')
+  if("7" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='phenoxymethylpenicillin')
+  if(is.null(input$AB))
+    inputfile <- "please select an antibiotic type"
+
+#if("1" %in% input$resis==TRUE && "2" %in% input$resis==TRUE)
+ggplot(inputfile,aes(x=Antibiotic,fill=Resistant.Organism.Y.N))+geom_bar(position="fill")+labs(x="Antibiotic",y="Percent of Patients")+theme(axis.text.x=element_text(angle=30),plot.title=element_text(hjust=0.5))
+})
+
+```
+
+### Averages
+```{r}
+renderTable({
+  assign('inputfile',plotdata)
+  # Age input conditionals
+  inputfile<- filter(inputfile,`Age`>=as.numeric(input$age[1]))
+  inputfile<- filter(inputfile,`Age`<=as.numeric(input$age[2]))
+  # Weight input conditionals
+  inputfile<- filter(inputfile,`Weight..kgs.`>=as.numeric(input$weight[1]))
+  inputfile<- filter(inputfile,`Weight..kgs.`<=as.numeric(input$weight[2]))  
+  # Height input conditionals
+  inputfile<- filter(inputfile,`Height..m.`>=as.numeric(input$height[1]))
+  inputfile<- filter(inputfile,`Height..m.`<=as.numeric(input$height[2]))
+  
+  # Date input conditionals
+inputfile<- filter(inputfile, (as.integer(input$OPATad[1]-as.Date.character(`OPAT.Start.Date`,"%m/%d/%Y"))) < 0)
+inputfile<- filter(inputfile, (as.integer(input$OPATad[2]-as.Date.character(`OPAT.Start.Date`,"%m/%d/%Y"))) > 0)
+  
+  # Risk of readmission checkbox group
+  if("1" %in% input$riskofre==FALSE )
+    inputfile<- filter(inputfile,`High.Risk.of.Readmission`=="Y")
+  if("2" %in% input$riskofre==FALSE)
+    inputfile<- filter(inputfile,`High.Risk.of.Readmission`=="N")
+  if(is.null(input$riskofre))
+    inputfile <- "please mark whether the patient is at risk for readmission"
+  
+  # Resistant Checkbox Group conditionals
+  if("1" %in% input$resis==FALSE )
+    inputfile<- filter(inputfile,`Resistant.Organism.Y.N`=="Y")
+  if("2" %in% input$resis==FALSE )
+    inputfile<- filter(inputfile,`Resistant.Organism.Y.N`=="N")
+  if(is.null(input$resis))
+    inputfile <- "please select a resistance"
+
+    # Gender Checkbox Group conditionals
+  if("Male" %in% input$MF==FALSE )
+    inputfile<- filter(inputfile,`Gender..M.F.`=="F")
+  if("Female" %in% input$MF==FALSE )
+    inputfile<- filter(inputfile,`Gender..M.F.`=="M")
+  if(is.null(input$resis))
+  
+  # Antibiotic Type Checkbox Group conditionals
+  if("1" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='erythromycin')
+  if("2" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='lymecycline')
+  if("3" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='norfloxacin')
+  if("4" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='ciprofloxacin')
+  if("5" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='amoxicillin')
+  if("6" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='gentamicin')
+  if("7" %in% input$AB==FALSE )
+    inputfile<- filter(inputfile,`Antibiotic`!='phenoxymethylpenicillin')
+  if(is.null(input$AB))
+    inputfile <- "please select an antibiotic type"
+  inputfile <- aggregate.data.frame(inputfile[,c(3,4)], list(inputfile$Antibiotic),mean,na.rm=T)
+})
+```
+
+Row 3 {data-height=110}
+-------------------------------------
+```{r}
+h5("If there is an error in graph or table generation, please make the filter specifications broader")
+```
+
+About
+===================================== 
+Row 1 {data-height=500}
+-----------------------------------------------------------------------
+```{r}
+h4("Infectious Disease Data Analysis Program (IDDAP) serves as a proof of concept for a user-friendly data
+filtering software that clinicians may use to aid their patient data analysis processes.
+The side bar to the left of the screen includes a series of “Filters” that can be selected and/or adjusted to
+isolate desired patient groups. An adjusted table of results will appear to the left under “Patient Data
+Results” within the “File Manipulation Tab.” This table can be searched through and arranged by each
+column (grey up/down arrows next to each column name).
+The “Data Analytics” tab shows two data visualizations and various statistics from the data.
+
+Created by:Elnaz Ghajar-Rahimi, Michael Hughes, and Jessica Mahoney, with the help of Laura Dunphy,
+Dr. Jason Papin, and Dr. Joshua Eby")
+```
